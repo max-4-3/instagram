@@ -20,7 +20,7 @@ else:
     # For Windows (duh?)
     DOWNLOAD_PATH_BASE = os.getenv("USERPROFILE") or os.path.join(os.getenv('HOMEDRIVE'), os.getenv('HOMEPATH'))
 # Makes full path
-DOWNLOAD_PATH = os.path.join(DOWNLOAD_PATH_BASE, "Downloads", "Instagram", "Users")
+DOWNLOAD_PATH = os.path.join(DOWNLOAD_PATH_BASE, "Downloads" if not android else "Download", "Instagram", "Users")  # In Android its "Download" not "Downloads"
 
 def broadcast_scanner_event(p: str):
     command = f'am broadcast -a android.intent.action.MEDIA_SCANNER_SCAN_FILE -d file://{p} >/dev/null 2>&1'
