@@ -6,10 +6,21 @@ from fake_useragent import UserAgent
 warnings.filterwarnings("ignore", category=DeprecationWarning)
 USER_GRAPH_QL_URL = "https://www.instagram.com/api/v1/users/web_profile_info/?username={username}"
 MEDIA_DETAIL_URL = "https://www.instagram.com/graphql/query/"
-MEDIA_DETAIL_HESH = "c6809c9c025875ac6f02619eae97a80e"
-DOWNLOAD_PATH = os.path.expanduser("~/Downloads/Instagram/Users")
+MEDIA_DETAIL_HESH = "c6809c9c025875ac6f02619eae97a80e"  # No longer works
+DOC_ID = 7950326061742207
 linux = os.name.lower() not in ['windows', 'nt']
 android = linux and os.path.exists('/sdcard/')
+if linux and not android:
+    # For Linux (Arch, Mint, Debian, etc)
+    DOWNLOAD_PATH_BASE = os.path.expanduser('~')
+elif linux and android:
+    # For Android (Termux, etc)
+    DOWNLOAD_PATH_BASE = os.path.abspath('/sdcard/')
+else:
+    # For Windows (duh?)
+    DOWNLOAD_PATH_BASE = os.getenv("USERPROFILE") or os.path.join(os.getenv('HOMEDRIVE'), os.getenv('HOMEPATH'))
+# Makes full path
+DOWNLOAD_PATH = os.path.join(DOWNLOAD_PATH_BASE, "Downloads", "Instagram", "Users")
 
 def broadcast_scanner_event(p: str):
     command = f'am broadcast -a android.intent.action.MEDIA_SCANNER_SCAN_FILE -d file://{p} >/dev/null 2>&1'
@@ -232,14 +243,18 @@ async def convert_image(fp: str, file_type: str = 'jpeg', q: int = 90, o: bool =
         print(f"Error converting \"{os.path.split(fp)[1]}\" to \"{file_type}\": {Fore.LIGHTRED_EX}{e}{Fore.RESET}")
 
 async def convert_all_images(image_folder: str, file_type: str = 'JPEG', quality: int = 90, optimize: bool = True, progressive: bool = True):
-    files = [file for file in os.listdir(image_folder) if os.path.splitext(file)[1] not in ['.mp4', '.png', '.jpg']]
+    try:
+        files = [file for file in os.listdir(image_folder) if os.path.splitext(file)[1] not in ['.mp4', '.png', '.jpg']]
 
-    tasks = []
-    for file in files:
-        tasks.append(asyncio.create_task(convert_image(os.path.join(image_folder, file), file_type, quality, optimize, progressive)))
-    
-    new_filename = await asyncio.gather(*tasks)
-    return new_filename
+        tasks = []
+        for file in files:
+            tasks.append(asyncio.create_task(convert_image(os.path.join(image_folder, file), file_type, quality, optimize, progressive)))
+        
+        new_filename = await asyncio.gather(*tasks)
+        return new_filename
+    except Exception as e:
+        print(f'Unable to Convert Any Images to Supported Formats (".jpg", ".png"): {e}')
+        return []
 
 async def setup_session():
     """
@@ -369,7 +384,7 @@ async def get_posts(sem: asyncio.Semaphore, session: aiohttp.ClientSession, user
                 'after': after
             }
             print(f'{page}. Extracting posts from {Fore.LIGHTGREEN_EX}{user_id}{Fore.RESET}...' if not total else f'{page}. Extracting posts from {Fore.LIGHTGREEN_EX}{user_id}{Fore.RESET}... [{total} total, {len(posts)} scraped]')
-            next_url = f"{MEDIA_DETAIL_URL}?query_hash={MEDIA_DETAIL_HESH}&variables={json.dumps(variables)}"
+            next_url = f"{MEDIA_DETAIL_URL}?doc_id={DOC_ID}&variables={json.dumps(variables)}"  # Originally it was "MEDIA_DETAIL_URL?query_id={MEDIA_QUERY_HASH}"
             response = await get(sem, session, next_url)
 
             if not response:
