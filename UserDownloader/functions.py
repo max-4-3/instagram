@@ -1,7 +1,7 @@
 # Standard libs
 import os, json, re, asyncio
 
-# Non standard libs ( pip install )
+# Non standard libs ( pip install -r requirments.txt )
 import aiofiles, PIL.Image, io
 
 # Custom files

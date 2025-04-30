@@ -1,9 +1,9 @@
 # Standard libs
-import asyncio, yarl, os
+import asyncio, os
 from urllib.parse import urlparse
 
-# Non Standard libs (pip install)
-import aiohttp, aiofiles
+# Non Standard libs (pip install -r requirments.txt)
+import aiohttp, aiofiles, yarl
 
 # Custom files
 from functions import sanitize_filename, broadcast_scanner_event, convert_all_images, save_json

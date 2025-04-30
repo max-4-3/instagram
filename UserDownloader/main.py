@@ -1,7 +1,7 @@
 import asyncio, json, random, os, warnings, random
 from urllib.parse import urlparse
 
-# Non Standard libs ( pip install )
+# Non Standard libs ( pip install -r requirments.txt )
 import aiohttp
 from rich import print
 

@@ -2,7 +2,7 @@
 import asyncio
 from contextlib import asynccontextmanager
 
-# Not standard libs (pip install)
+# Not standard libs (pip install -r requirments.txt)
 import aiohttp
 from fake_useragent import UserAgent
 
