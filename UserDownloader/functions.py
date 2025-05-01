@@ -20,7 +20,7 @@ def load_json(fp: str):
 
 def save_json(data, fp):
     with open(fp, 'w', errors='ignore', encoding='utf-8') as file:
-        json.dump(data, file, indents=4, ensure_ascii=False)
+        json.dump(data, file, indent=4, ensure_ascii=False)
 
 def sanitize_filename(filename: str, replacement: str = '_', max_length: int = 100) -> str:
     # Characters invalid in filenames on Windows and Linux

@@ -93,11 +93,9 @@ async def main_session(*_, **kwargs):
         for key, value in kwargs.get('headers', {}).items():
             if key not in headers.keys():
                 headers[key.strip()] = value.strip()
-        del kwargs['headers']
     
-    session = await give_nice_session(headers=headers)
+    session = await give_nice_session(headers=headers, **kwargs)
     try:
         yield session
     finally:
-        await session.close()
-    
+        await session.close()    

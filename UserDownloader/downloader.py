@@ -3,7 +3,9 @@ import asyncio, os
 from urllib.parse import urlparse
 
 # Non Standard libs (pip install -r requirments.txt)
+import aiohttp.client_exceptions
 import aiohttp, aiofiles, yarl
+from tqdm import tqdm
 
 # Custom files
 from functions import sanitize_filename, broadcast_scanner_event, convert_all_images, save_json
@@ -18,27 +20,23 @@ async def download_media(sem: asyncio.Semaphore, session: aiohttp.ClientSession,
         )
     )
     async with sem:
-        print(f'{idx}. Downloading "{filename}" in "{download_path}"...')
+        # print(f'{idx}. Downloading "{filename}" in "{download_path}"...')
         filepath = os.path.join(download_path, filename)
         if not url.startswith('http'):
             print(f'{idx}. Invalid url: {url}')
             return 0
         try:
             async with session.get(yarl.URL(url, encoded=True), allow_redirects=True) as r:
-                if r.status != 200:
-                    print(f'[{r.status}] Unable to download from: {url}')
-                    return 0
+                r.raise_for_status()
+                # print(f'[{r.status}] Unable to download from: {url}')
                 
                 l = 0
                 async with aiofiles.open(filepath, 'wb') as file:
-                    while True:
-                        chunk = await r.content.read(chuck_size)
-                        if not chunk:
-                            break
+                    while chunk := await r.content.read(20971520):
                         await file.write(chunk)
                         l += len(chunk)
-
-                print(f'{idx}. Succesfully Downloaded "{filename}"! [{l / (1024 ** 2):.2f}MB]')
+                    
+                # print(f'{idx}. Succesfully Downloaded "{filename}"! [{l / (1024 ** 2):.2f}MB]')
                 return l
         except Exception as e:
             print(f'{idx}. Error Occured while downloading "{filename}": {e}')
@@ -52,6 +50,15 @@ async def download_user(sem, session: aiohttp.ClientSession, data: dict, downloa
 
     download_size = 0
     tasks = []
+    pbar = tqdm(desc=name, unit='files', unit_divisor=False, unit_scale=False, position=0, total=len(posts), colour='green')
+
+    async def download_wrapper(pbar, *args, **kwargs):
+        try:
+            result = await download_media(*args, **kwargs)
+            pbar.update(1)
+            return result
+        except:
+            return 0
 
     posts = data.get('posts')
     updated_posts = []
@@ -69,7 +76,7 @@ async def download_user(sem, session: aiohttp.ClientSession, data: dict, downloa
                     title += '_' + str(media['id'])
                     file_type = '.mp4' if media['is_video'] else (f".{file_type_from_url if file_type_from_url else 'jpg'}")
                 if not media['downloaded']:
-                    tasks.append(asyncio.create_task(download_media(sem, session, idx, title, file_type, media_url, posts_path)))
+                    tasks.append(asyncio.create_task(download_wrapper(pbar, sem, session, idx, title, file_type, media_url, posts_path)))
                     new_media = {key: value for key, value in media.items()}
                     new_media['downloaded'] = True
                     new_medias.append(new_media)
@@ -82,9 +89,11 @@ async def download_user(sem, session: aiohttp.ClientSession, data: dict, downloa
         os.makedirs(media_path, exist_ok=True)
         for idx, (key, value) in enumerate(user_media.items(), start=1):
             tasks.append(
-                asyncio.create_task(download_media(sem, session, idx, f"{name}_profile_pic_{key}", '.jpg', value, media_path))
+                asyncio.create_task(download_wrapper(pbar, sem, session, idx, f"{name}_profile_pic_{key}", '.jpg', value, media_path))
             )
     
+    pbar.total = len(tasks)
+
     download_size += sum(await asyncio.gather(*tasks)) if tasks else 0
     data['posts'] = updated_posts
 

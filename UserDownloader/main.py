@@ -12,7 +12,7 @@ from downloader import download_user
 from objects import get_simplified_post
 from session import download_session_maker, main_session
 
-warnings.filters("ignore", DeprecationWarning)
+warnings.filterwarnings("ignore", "DeprecationWarning")
 
 async def get(sem: asyncio.Semaphore, session: aiohttp.ClientSession, url: str, as_json: bool = True):
     async with sem:
@@ -175,7 +175,7 @@ async def main():
                                 try:
                                     os.remove(f'{username}_initial_prop.json')
                                     print(f'Cleaned up {username}_initial_prop.json')
-                                except OSError as file_err:
+                                except Exception as file_err:
                                     print(f"Failed to delete temp file: {file_err}")
                         except KeyboardInterrupt:
                             print("Scraping interrupted by user.")
