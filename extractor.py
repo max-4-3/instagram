@@ -51,7 +51,7 @@ class Extractor:
     # ---------------- Cache Utils ---------------- #
     def _generate_cache_path(self, cache_name: str) -> Path:
         self._cache_path.mkdir(exist_ok=True)
-        safe_name = f"._{abs(hash(cache_name))}_cache"
+        safe_name = f"._{sum(ord(n) for n in cache_name)}_cache"
         return self._cache_path / safe_name
 
     def _purge_cache(self):
@@ -73,18 +73,21 @@ class Extractor:
         }
         with open(path, "w", encoding="utf-8") as f:
             json.dump(payload, f)
-        self._logger.debug(f"Cached: {name}")
+        self._logger.debug(f"Cached: {name} [{path}]")
 
     def load_from_cache(self, name: str):
         path = self._generate_cache_path(name)
         if not path.exists():
+            self._logger.warn(f"Cache file not exist: {path} [{name}]") 
             return None
         try:
             with open(path, "r", encoding="utf-8") as f:
                 cache = json.load(f)
             cache["expired"] = cache["expire"] <= datetime.now().timestamp()
+            self._logger.info(f"Cache found: {path} [{name} and is {'' if cache['expired'] else 'not'} expired]")
             return cache
-        except Exception:
+        except Exception as error:
+            self._logger.warn(f"Error with cache: {path} [{error}]")
             path.unlink(missing_ok=True)
             return None
 
@@ -131,7 +134,6 @@ class Extractor:
     async def get_user(self, username: str) -> Owner:
         cache = self.load_from_cache(username)
         if cache and not cache["expired"]:
-            self._logger.debug(f"Loaded cached user: {username}")
             return self.parse_user(cache["data"])
 
         resp = await self.make_request(
@@ -163,9 +165,10 @@ class Extractor:
             url = f"{DOMAIN}/graphql/query/?doc_id={self.POST_DOC_ID}&variables={parse.quote(json.dumps(variables))}"
 
             cache = self.load_from_cache(url)
+            cache_used = False
             if use_cache and cache and not cache["expired"]:
-                self._logger.debug(f"Loaded cached posts for {user_id}")
                 data = cache["data"]
+                cache_used = True
             else:
                 resp = await self.make_request("get", url)
                 data = await resp.json()
@@ -188,7 +191,8 @@ class Extractor:
                     self._logger.error(f"Error parsing post: {e}")
             yield parsed
 
-            await asleep(1.0)
+            if not cache_used:
+                await asleep(1.0)
 
     # ---------------- Parsers ---------------- #
     @staticmethod

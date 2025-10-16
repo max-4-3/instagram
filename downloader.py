@@ -57,11 +57,13 @@ class Downloader:
                     return content_length
 
                 # Stream write with callback
+                downloaded = 0
                 with open(filename, "wb") as file:
                     async for chunk in response.content.iter_chunked(self.chunk_size):
                         file.write(chunk)
+                        downloaded += len(chunk)
                         if callable(proc_callback):
-                            proc_callback(content_length, len(chunk))
+                            proc_callback(content_length, downloaded)
 
                 return filename.stat().st_size
 

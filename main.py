@@ -16,24 +16,30 @@ async def download_user(user: Owner, session: ClientSession, console: Console, s
     downloader = Downloader(Semaphore(3), session, save_path)
     batch_size = 5
 
-    with Progress(console=console) as progress_bar:
-        async def download_post_with_progress(post):
-            task_id = progress_bar.add_task(f"{user.username}-{post.id}")
-            return await downloader.download_post(
-                post,
-                lambda total, done: progress_bar.update(
-                    task_id, total=total, completed=done
+    with Progress(console=console) as post_progress:
+        total_task = post_progress.add_task("Post downloaded", total=user.posts_count)
+
+        with Progress(console=console, transient=True) as progress_bar:
+            async def download_post_with_progress(post):
+                task_id = progress_bar.add_task(f"{user.username}-{post.id}", total=None)
+                download_size = await downloader.download_post(
+                    post,
+                    lambda total, done: progress_bar.update(
+                        task_id, total=total, completed=done
+                    )
                 )
-            )
+                post_progress.advance(total_task, 1)
+                progress_bar.remove_task(task_id)
+                return download_size
 
-        for i in range(0, len(user.posts), batch_size):
-            batch = user.posts[i:i + batch_size]
-            await gather(*(download_post_with_progress(p) for p in batch))
+            for i in range(0, len(user.posts), batch_size):
+                batch = user.posts[i:i + batch_size]
+                await gather(*(download_post_with_progress(p) for p in batch))
 
-            # gentle randomized pause between batches
-            delay = downloader.delay + random.uniform(0.3, 1.0)
-            console.log(f"[yellow]Pausing {delay:.2f}s before next batch...[/yellow]")
-            await sleep(delay)
+                # gentle randomized pause between batches
+                delay = downloader.delay + random.uniform(0.3, 1.0)
+                console.log(f"[yellow]Pausing {delay:.2f}s before next batch...[/yellow]")
+                await sleep(delay)
 
 
 async def main():
@@ -58,9 +64,9 @@ async def main():
                 console.log(f"Extracted {len(posts)} posts so far...")
 
             user_data.posts = posts
-            user_path = Path(username)
+            user_path = Path("~/Downloads/Instagram/Users").expanduser() / username
             user_path.mkdir(parents=True, exist_ok=True)
-            extractor.save_data(user_data, user_path.with_name(f"{username}.json"))
+            extractor.save_data(user_data, user_path / f"{username}.json")
 
             console.print(f"[green]Starting downloads for {len(posts)} posts.[/green]")
             await download_user(user_data, session, console, user_path / "posts")
@@ -69,6 +75,7 @@ async def main():
 
     except KeyboardInterrupt:
         console.print("\n[red]Download interrupted by user.[/red]")
+        exit(0)
     except Exception as e:
         console.print_exception(show_locals=False)
         console.log(f"[red]Error: {e}[/red]")
