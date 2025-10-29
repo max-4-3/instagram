@@ -78,7 +78,7 @@ class Extractor:
     def load_from_cache(self, name: str):
         path = self._generate_cache_path(name)
         if not path.exists():
-            self._logger.warn(f"Cache file not exist: {path} [{name}]") 
+            self._logger.warning(f"Cache file not exist: {path} [{name}]") 
             return None
         try:
             with open(path, "r", encoding="utf-8") as f:
@@ -87,7 +87,7 @@ class Extractor:
             self._logger.info(f"Cache found: {path} [{name} and is {'' if cache['expired'] else 'not'} expired]")
             return cache
         except Exception as error:
-            self._logger.warn(f"Error with cache: {path} [{error}]")
+            self._logger.warning(f"Error with cache: {path} [{error}]")
             path.unlink(missing_ok=True)
             return None
 
@@ -227,6 +227,7 @@ class Extractor:
             case "GraphSidecar":
                 for child_edge in node.get("edge_sidecar_to_children", {}).get("edges", []):
                     child = self.get_or_none(child_edge, "node", {})
+                    if child is None: continue
                     owner_data = child.get("owner", {"id": -1, "username": "unknown"})
                     media.append(SideCarMedia(
                         id=int(child.get("id", 0)),
@@ -246,7 +247,7 @@ class Extractor:
             TaggedUser(
                 id=int(t["node"]["user"]["id"]),
                 username=t["node"]["user"]["username"],
-                full_name=t["node"]["user"]["full_name"],
+                fullname=t["node"]["user"]["full_name"],
                 pfp=PFP(
                     pic=t["node"]["user"].get("profile_pic_url", ""),
                     hd=t["node"]["user"].get("profile_pic_url_hd") or t["node"]["user"].get("profile_pic_url", "")
@@ -266,7 +267,7 @@ class Extractor:
             likes=node.get("edge_liked_by", {}).get("count", 0),
             comments=node.get("edge_media_to_comment", {}).get("count", 0),
             thumbnail=node["thumbnail_src"],
-            tagged_users=tagged_users,
+            tagged=tagged_users,
             is_video=node.get("is_video", False),
             media=media
         )

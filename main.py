@@ -17,7 +17,7 @@ async def download_user(user: Owner, session: ClientSession, console: Console, s
     batch_size = 5
 
     with Progress(console=console) as post_progress:
-        total_task = post_progress.add_task("Post downloaded", total=user.posts_count)
+        total_task = post_progress.add_task("Post downloaded", total=user.posts_count + (1 if user.pfp else 0))  # +1 for pfp
 
         with Progress(console=console, transient=True) as progress_bar:
             async def download_post_with_progress(post):
@@ -40,6 +40,13 @@ async def download_user(user: Owner, session: ClientSession, console: Console, s
                 delay = downloader.delay + random.uniform(0.3, 1.0)
                 console.log(f"[yellow]Pausing {delay:.2f}s before next batch...[/yellow]")
                 await sleep(delay)
+
+            # Download pfp at the very end
+            if user.pfp:
+                pfp_task = progress_bar.add_task(f"{user.username}-avatar", start=False)
+                await downloader.__download__(user.pfp.hd or user.pfp.pic, save_path / f"{user.username}-avatar.png", lambda total, done: progress_bar.update(pfp_task, total=total, completed=done))
+                post_progress.advance(total_task, 1)
+                progress_bar.remove_task(pfp_task)
 
 
 async def main():
@@ -66,7 +73,7 @@ async def main():
             user_data.posts = posts
             user_path = Path("~/Downloads/Instagram/Users").expanduser() / username
             user_path.mkdir(parents=True, exist_ok=True)
-            extractor.save_data(user_data, user_path / f"{username}.json")
+            extractor.save_data(user_data, str(user_path / f"{username}.json"))
 
             console.print(f"[green]Starting downloads for {len(posts)} posts.[/green]")
             await download_user(user_data, session, console, user_path / "posts")

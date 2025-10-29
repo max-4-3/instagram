@@ -3,6 +3,9 @@ import inspect
 from functools import wraps
 from pathlib import Path
 from aiohttp import ClientSession
+from typing import Callable
+
+from models import Post
 
 
 class Downloader:
@@ -44,7 +47,7 @@ class Downloader:
                     delay *= self.backoff_factor
         return wrapper
 
-    async def __download__(self, url: str, filename: Path, proc_callback=None) -> int:
+    async def __download__(self, url: str, filename: Path, proc_callback: Callable[[int, int], None] | None = None) -> int:
         async with self.sem:
             async with self.session.get(url) as response:
                 response.raise_for_status()
@@ -68,7 +71,7 @@ class Downloader:
                 return filename.stat().st_size
 
     @staticmethod
-    def generate_filename_from_post(post):
+    def generate_filename_from_post(post: Post):
         # safe_title = "".join(
         #     c if c.isalnum() or c in (
         #         ' ', '-', '_'
@@ -76,7 +79,7 @@ class Downloader:
         # )
         return f"{post.id}-{post.owner.username}"
 
-    async def download_post(self, post, progress_callback=None):
+    async def download_post(self, post: Post, progress_callback: Callable[[int, int], None] | None = None):
         base_filename = self.root_path / self.generate_filename_from_post(post)
         total_size = 0
 

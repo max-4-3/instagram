@@ -1,4 +1,4 @@
-from pydantic import BaseModel, EmailStr, HttpUrl
+from pydantic import BaseModel, EmailStr
 from pydantic import model_validator
 from static import DOMAIN
 
@@ -43,7 +43,6 @@ class TaggedUser(BaseUser):
 
 class Owner(BaseUser):
     fb_id: int
-    fullname: str
     eimu_id: int
     bio: str
     bio_links: list[BioLink | None]
@@ -89,7 +88,7 @@ class Post(BaseModel):
     comments: int
     likes: int
     timestamp: float | int
-    tagged: list[TaggedUser | None] = []
+    tagged: list[TaggedUser] = []
     thumbnail: str | None = None
     media: list[BaseGraphMedia | SideCarMedia] = []
     url: str | None = None
