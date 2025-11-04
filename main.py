@@ -5,10 +5,11 @@ from aiohttp import ClientSession
 from rich.console import Console
 from rich.progress import Progress
 
-from extractor import Extractor
+from extractor import Extractor, PrivateUser
 from downloader import Downloader
 from static import HEADERS
 from models import Owner
+from session import load_env, create_cookie_header
 
 
 async def download_user(user: Owner, session: ClientSession, console: Console, save_path: Path):
@@ -62,7 +63,12 @@ async def main():
         async with ClientSession(headers=HEADERS) as session:
             extractor = Extractor(session)
             console.print("[blue]Extracting user info...[/blue]")
-            user_data = await extractor.get_user(username)
+            try:
+                user_data = await extractor.get_user(username, True)
+            except PrivateUser:
+                console.print(f"[red italic]{username}[/italic red] is a private account!\nUsing [yellow bold]Cookies[/bold yellow]...")
+                session.headers["Cookie"] = create_cookie_header(load_env())
+                user_data = await extractor.get_user(username, False)
 
             console.print(f"[cyan]Fetching posts for {username}...[/cyan]")
             posts = []

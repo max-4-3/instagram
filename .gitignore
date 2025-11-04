@@ -11,3 +11,4 @@ wheels/
 *.json
 *.log
 *cache*
+.env

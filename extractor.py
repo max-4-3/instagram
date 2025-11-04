@@ -7,7 +7,7 @@ from pathlib import Path
 from logging import Logger, FileHandler, Formatter, getLogger
 import json
 
-from static import DOMAIN
+from static import DOMAIN, HEADERS
 from models import (
     Post, BioLink, Owner, PFP,
     SideCarMedia, BaseGraphMedia,
@@ -131,20 +131,24 @@ class Extractor:
             return await self.session.request(*args, **kwargs)
 
     # ---------------- Core Logic ---------------- #
-    async def get_user(self, username: str) -> Owner:
+    async def get_user(self, username: str, raise_private_user_error: bool = False) -> Owner:
         cache = self.load_from_cache(username)
         if cache and not cache["expired"]:
-            return self.parse_user(cache["data"])
+            return self.parse_user(cache["data"], raise_private_user_error)
 
+        headers = self.session.headers
+        headers["Referer"] = HEADERS["Referer"] + "/" + username
         resp = await self.make_request(
             "get",
-            self.USER_ENDPOINT_URL.format(username)
+            self.USER_ENDPOINT_URL.format(username),
+            headers=headers
         )
+
         resp.raise_for_status()
 
         data = await resp.json()
         self.save_to_cache(username, data, 12 * 60 * 60)  # 12 hr TTL
-        return self.parse_user(data)
+        return self.parse_user(data, raise_private_user_error)
 
     async def get_posts(
         self,
@@ -202,8 +206,10 @@ class Extractor:
         except Exception:
             return getattr(data, key, default)
 
-    def parse_user(self, raw) -> Owner:
+    def parse_user(self, raw, raise_error: bool) -> Owner:
         raw_user = raw.get("data", {}).get("user", raw)
+        if raise_error and raw_user.get("is_private", False):
+            raise PrivateUser(username=raw_user.get("username"))
         return self._build_owner(raw_user)
 
     def parse_post(self, raw) -> Post:
@@ -302,3 +308,8 @@ class Extractor:
             bussiness_email=data.get("business_email"),
             bussiness_phone=data.get("business_phone_number")
         )
+
+class PrivateUser(Exception):
+    def __init__(self, username: str, *args: object) -> None:
+        super().__init__(*args)
+        self.username = username

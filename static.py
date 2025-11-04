@@ -6,5 +6,5 @@ HEADERS = {
     'X-IG-App-ID': '936619743392459',
     'X-ASBD-ID': '359341',
     'X-Requested-With': 'XMLHttpRequest',
-    'Referer': 'https://www.instagram.com/official_kareena_17/',
+    'Referer': 'https://www.instagram.com',
 }
