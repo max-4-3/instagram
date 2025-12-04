@@ -29,17 +29,21 @@ class Downloader:
             root_save_path, Path) else root_save_path
         self.root_path.mkdir(parents=True, exist_ok=True)
 
-    def retry(self, func):
+    def retry(self, func, cleanup: Callable = lambda: None):
         @wraps(func)
         async def wrapper(*args, **kwargs):
             delay = self.delay
             for attempt in range(1, self.retry_limit + 2):  # +1 for final attempt
                 try:
-                    if inspect.iscoroutinefunction(func):
-                        return await func(*args, **kwargs)
-                    return func(*args, **kwargs)
+                    result = func(*args, **kwargs)
+
+                    if inspect.isawaitable(result):
+                        return await result
+                    
+                    return result
                 except Exception as e:
                     if attempt > self.retry_limit:
+                        cleanup()
                         raise Exception(
                             f"Retry limit reached for {func.__name__}"
                         ) from e

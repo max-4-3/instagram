@@ -1,18 +1,25 @@
-from aiohttp import ClientSession
 from asyncio import Semaphore, sleep as asleep
-from urllib import parse
-from typing import AsyncGenerator
 from datetime import datetime
-from pathlib import Path
-from logging import Logger, FileHandler, Formatter, getLogger
 import json
+from logging import FileHandler, Formatter, Logger, getLogger
+from pathlib import Path
+from typing import AsyncGenerator
+from urllib import parse
 
-from static import DOMAIN, HEADERS
+from aiohttp import ClientSession
+
 from models import (
-    Post, BioLink, Owner, PFP,
-    SideCarMedia, BaseGraphMedia,
-    TaggedUser, BaseUser, BaseModel
+    BaseGraphMedia,
+    BaseModel,
+    BaseUser,
+    BioLink,
+    Owner,
+    PFP,
+    Post,
+    SideCarMedia,
+    TaggedUser,
 )
+from static import DOMAIN, HEADERS
 
 
 class Extractor:
@@ -23,7 +30,7 @@ class Extractor:
         self,
         session: ClientSession,
         semaphore: Semaphore = Semaphore(2),
-        logger: Logger | None = None
+        logger: Logger | None = None,
     ):
         self.session = session
         self.sem = semaphore
@@ -48,6 +55,16 @@ class Extractor:
             self._logger.addHandler(fh)
         self._logger.info("Extractor initialized")
 
+        self._request_logger = getLogger("request-logger" + self.__class__.__name__)
+        self._request_logger.setLevel(10)
+        fh = FileHandler(self._log_path / "request-logger.log", "w")
+        fh.setLevel(10)
+        fh.setFormatter(
+            Formatter("%(levelname)s --------- %(asctime)s --------- \n%(message)s\n")
+        )
+        self._request_logger.addHandler(fh)
+        self._request_logger.debug("Request logger initialized")
+
     # ---------------- Cache Utils ---------------- #
     def _generate_cache_path(self, cache_name: str) -> Path:
         self._cache_path.mkdir(exist_ok=True)
@@ -67,24 +84,23 @@ class Extractor:
 
     def save_to_cache(self, name: str, data: dict | list, ttl_seconds: int):
         path = self._generate_cache_path(name)
-        payload = {
-            "data": data,
-            "expire": datetime.now().timestamp() + ttl_seconds
-        }
+        payload = {"data": data, "expire": datetime.now().timestamp() + ttl_seconds}
         with open(path, "w", encoding="utf-8") as f:
-            json.dump(payload, f)
-        self._logger.debug(f"Cached: {name} [{path}]")
+            json.dump(payload, f, indent=4, ensure_ascii=False)
+        self._logger.debug(f"[+] Cached: {name} [{path}] [{json.dumps(data)}]")
 
     def load_from_cache(self, name: str):
         path = self._generate_cache_path(name)
         if not path.exists():
-            self._logger.warning(f"Cache file not exist: {path} [{name}]") 
+            self._logger.warning(f"Cache file not exist: {path} [{name}]")
             return None
         try:
             with open(path, "r", encoding="utf-8") as f:
                 cache = json.load(f)
             cache["expired"] = cache["expire"] <= datetime.now().timestamp()
-            self._logger.info(f"Cache found: {path} [{name} and is {'' if cache['expired'] else 'not'} expired]")
+            self._logger.info(
+                f"Cache found: {path} [{name} and is {'' if cache['expired'] else 'not'} expired]"
+            )
             return cache
         except Exception as error:
             self._logger.warning(f"Error with cache: {path} [{error}]")
@@ -128,20 +144,39 @@ class Extractor:
     # ---------------- HTTP ---------------- #
     async def make_request(self, *args, **kwargs):
         async with self.sem:
-            return await self.session.request(*args, **kwargs)
+            response = await self.session.request(*args, **kwargs)
+            pretty_resp_headers = "\n".join(
+                f"{k}: {v}" for k, v in response.headers.items()
+            )
+            pretty_req_headers = "\n".join(
+                f"{k}: {v}" for k, v in response.request_info.headers.items()
+            )
+            content = await response.text()
+
+            self._request_logger.info(
+                f"{response.method}: {response.url} "
+                f"[{response.status} - {response.content_type}]\n\n"
+                f"Response Headers:\n{pretty_resp_headers}\n\n"
+                f"Request Headers:\n{pretty_req_headers}\n\n"
+                f"Content:\n{content}"
+            )
+            return response
 
     # ---------------- Core Logic ---------------- #
-    async def get_user(self, username: str, raise_private_user_error: bool = False) -> Owner:
+    async def get_user(
+        self,
+        username: str,
+        raise_private_user_error: bool = False,
+        use_cache: bool = True,
+    ) -> Owner:
         cache = self.load_from_cache(username)
-        if cache and not cache["expired"]:
+        if use_cache and cache and not cache["expired"]:
             return self.parse_user(cache["data"], raise_private_user_error)
 
         headers = self.session.headers
         headers["Referer"] = HEADERS["Referer"] + "/" + username
         resp = await self.make_request(
-            "get",
-            self.USER_ENDPOINT_URL.format(username),
-            headers=headers
+            "get", self.USER_ENDPOINT_URL.format(username), headers=headers
         )
 
         resp.raise_for_status()
@@ -155,7 +190,7 @@ class Extractor:
         user: BaseUser,
         after: str | None = None,
         first: int = 12,
-        use_cache: bool = True
+        use_cache: bool = True,
     ) -> AsyncGenerator[list[Post], None]:
         has_next = True
         user_id = str(user.id)
@@ -164,7 +199,7 @@ class Extractor:
             variables = {
                 "id": user_id,
                 "first": first,
-                **({"after": after} if after else {})
+                **({"after": after} if after else {}),
             }
             url = f"{DOMAIN}/graphql/query/?doc_id={self.POST_DOC_ID}&variables={parse.quote(json.dumps(variables))}"
 
@@ -219,32 +254,41 @@ class Extractor:
 
         match node_type:
             case "GraphImage":
-                media.append(BaseGraphMedia(
-                    url=node["display_url"],
-                    width=node.get("dimensions", {}).get("width", 0),
-                    height=node.get("dimensions", {}).get("height", 0)
-                ))
+                media.append(
+                    BaseGraphMedia(
+                        url=node["display_url"],
+                        width=node.get("dimensions", {}).get("width", 0),
+                        height=node.get("dimensions", {}).get("height", 0),
+                    )
+                )
             case "GraphVideo":
-                media.append(BaseGraphMedia(
-                    url=node["video_url"],
-                    width=node.get("dimensions", {}).get("width", 0),
-                    height=node.get("dimensions", {}).get("height", 0)
-                ))
+                media.append(
+                    BaseGraphMedia(
+                        url=node["video_url"],
+                        width=node.get("dimensions", {}).get("width", 0),
+                        height=node.get("dimensions", {}).get("height", 0),
+                    )
+                )
             case "GraphSidecar":
-                for child_edge in node.get("edge_sidecar_to_children", {}).get("edges", []):
+                for child_edge in node.get("edge_sidecar_to_children", {}).get(
+                    "edges", []
+                ):
                     child = self.get_or_none(child_edge, "node", {})
-                    if child is None: continue
+                    if child is None:
+                        continue
                     owner_data = child.get("owner", {"id": -1, "username": "unknown"})
-                    media.append(SideCarMedia(
-                        id=int(child.get("id", 0)),
-                        shortcode=child.get("shortcode", "no_code"),
-                        is_video=child.get("is_video", False),
-                        type=child.get("__typename", "GraphImage"),
-                        url=child.get("video_url") or child.get("display_url", ""),
-                        width=child.get("dimensions", {}).get("width", 0),
-                        height=child.get("dimensions", {}).get("height", 0),
-                        owner=BaseUser(**owner_data)
-                    ))
+                    media.append(
+                        SideCarMedia(
+                            id=int(child.get("id", 0)),
+                            shortcode=child.get("shortcode", "no_code"),
+                            is_video=child.get("is_video", False),
+                            type=child.get("__typename", "GraphImage"),
+                            url=child.get("video_url") or child.get("display_url", ""),
+                            width=child.get("dimensions", {}).get("width", 0),
+                            height=child.get("dimensions", {}).get("height", 0),
+                            owner=BaseUser(**owner_data),
+                        )
+                    )
 
         caption_edges = node.get("edge_media_to_caption", {}).get("edges", [])
         caption = caption_edges[0]["node"]["text"] if caption_edges else ""
@@ -256,8 +300,9 @@ class Extractor:
                 fullname=t["node"]["user"]["full_name"],
                 pfp=PFP(
                     pic=t["node"]["user"].get("profile_pic_url", ""),
-                    hd=t["node"]["user"].get("profile_pic_url_hd") or t["node"]["user"].get("profile_pic_url", "")
-                )
+                    hd=t["node"]["user"].get("profile_pic_url_hd")
+                    or t["node"]["user"].get("profile_pic_url", ""),
+                ),
             )
             for t in node.get("edge_media_to_tagged_user", {}).get("edges", [])
             if t and t not in [None, {}] and isinstance(t, dict)
@@ -275,7 +320,7 @@ class Extractor:
             thumbnail=node["thumbnail_src"],
             tagged=tagged_users,
             is_video=node.get("is_video", False),
-            media=media
+            media=media,
         )
 
     def _build_owner(self, data) -> Owner:
@@ -290,7 +335,7 @@ class Extractor:
                 BioLink(
                     url=link["url"],
                     title=link.get("title", ""),
-                    type=link.get("link_type", "external")
+                    type=link.get("link_type", "external"),
                 )
                 for link in data.get("external_url_links", data.get("bio_links", []))
                 if link
@@ -301,13 +346,14 @@ class Extractor:
             is_verified=data.get("is_verified", False),
             pfp=PFP(
                 pic=data["profile_pic_url"],
-                hd=data.get("profile_pic_url_hd", data["profile_pic_url"])
+                hd=data.get("profile_pic_url_hd", data["profile_pic_url"]),
             ),
             pronouns=data.get("pronouns", []),
             posts_count=data.get("edge_owner_to_timeline_media", {}).get("count", 0),
             bussiness_email=data.get("business_email"),
-            bussiness_phone=data.get("business_phone_number")
+            bussiness_phone=data.get("business_phone_number"),
         )
+
 
 class PrivateUser(Exception):
     def __init__(self, username: str, *args: object) -> None:

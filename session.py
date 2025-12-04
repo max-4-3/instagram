@@ -16,8 +16,8 @@ def load_env(start: str = __file__, max_depth: int = 10) -> Path:
 
     return env
 
-def create_cookie_header(env_file: Path) -> str:
-    cookies = []
+def create_cookie_dict(env_file: Path) -> dict[str, str | int]:
+    cookies = {}
     pattern = re.compile(r'\s*([^ ]*)\s*=\s*([^\n]+)')
     with env_file.open('r', errors='ignore') as file:
         for line in file.readlines():
@@ -30,5 +30,5 @@ def create_cookie_header(env_file: Path) -> str:
 
             key, value = syntax_match.groups()
 
-            cookies.append(f'{key}:{value}')
-    return ';'.join(cookies)
+            cookies[key] = value
+    return cookies
