@@ -154,6 +154,13 @@ def parse_response(resp: dict) -> dict:
     info["items"] = list(filter(bool, info["items"]))
     return info
 
+# https://stackoverflow.com/questions/1094841/get-a-human-readable-version-of-a-file-size#1094933
+def sizeof_fmt(num, suffix="B"):
+    for unit in ("", "Ki", "Mi", "Gi", "Ti", "Pi", "Ei", "Zi"):
+        if abs(num) < 1024.0:
+            return f"{num:3.1f}{unit}{suffix}"
+        num /= 1024.0
+    return f"{num:.1f}Yi{suffix}"
 
 def main():
     urls = get_urls()
@@ -203,7 +210,7 @@ def main():
                             root_dir / ("%s" % data["user"]["id"]),
                             show_prog,
                         )
-                        print("\n\t%02d. %s -> %s [%d]".expandtabs(2) % (idx, item["id"], d, t))
+                        print("\n\t%02d. %s -> %s [%d]".expandtabs(2) % (idx, item["id"], d, sizeof_fmt(t)))
                         time.sleep(idx % 3)
                     except KeyboardInterrupt:
                         break
