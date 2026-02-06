@@ -157,7 +157,7 @@ def main():
                 )
                 data = parse_response(json.loads(resp.text))
                 Path("./data-%s-%03d.json" % (variables["shortcode"], i)).write_text(
-                    json.dumps(data, indent=2)
+                    json.dumps(data, indent=2, ensure_ascii=False)
                 )
                 print(
                     "%02d. Downloading: %s (%02d)" % (i, variables["shortcode"], len(data["items"]))
