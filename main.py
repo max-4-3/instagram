@@ -18,16 +18,38 @@ headers = {
     "Referer": "https://www.instagram.com/",
     "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36",
 }
+root_dir = Path("./downloaded_files")
 
 
 def get_urls() -> list[str]:
     if len(sys.argv) < 2:
         raise RuntimeError("Not enough arguments")
 
+    def valid_url(url: str) -> bool:
+        return (p := urlparse(url)) and (
+            p.scheme in {"http", "https"} and bool(p.netloc)
+        )
+
     urls = []
-    for arg in sys.argv[1:]:
-        if (p := urlparse(arg)) and (p.scheme in {"http", "https"} and bool(p.netloc)):
-            urls.append(arg)
+    lenght = len(sys.argv)
+    count = 1
+    while count < lenght:
+        arg = sys.argv[count]
+
+        if (
+            arg == "-d"
+            and count + 1 <= lenght
+            and (next_arg := sys.argv[count + 1])
+            and not valid_url(next_arg)
+        ):
+            global root_dir
+            root_dir = Path(next_arg)
+            count += 1
+        else:
+            if valid_url(arg):
+                urls.append(arg)
+
+        count += 1
 
     return urls
 
@@ -160,15 +182,17 @@ def main():
                     json.dumps(data, indent=2, ensure_ascii=False)
                 )
                 print(
-                    "%02d. Downloading: %s (%02d)" % (i, variables["shortcode"], len(data["items"]))
+                    "%02d. Downloading: %s (%02d)"
+                    % (i, variables["shortcode"], len(data["items"]))
                 )
 
                 for idx, item in enumerate(data["items"], start=1):
                     try:
+
                         def show_prog(done, total, _):
                             if atty:
                                 print(
-                                    "\r%02d. %s (%.1f%%)"
+                                    "\r\t%02d. %s (%.1f%%)".expandtabs(2)
                                     % (idx, item["id"], (done / total) * 100),
                                     end="",
                                 )
@@ -176,10 +200,10 @@ def main():
                         d, t = download_media(
                             session,
                             item,
-                            Path("./downloaded_files/%s/" % data["user"]["id"]),
+                            root_dir / ("%s" % data["user"]["id"]),
                             show_prog,
                         )
-                        print("\n%02d. %s -> %s [%d]" % (idx, item["id"], d, t))
+                        print("\n\t%02d. %s -> %s [%d]".expandtabs(2) % (idx, item["id"], d, t))
                         time.sleep(idx % 3)
                     except KeyboardInterrupt:
                         break
