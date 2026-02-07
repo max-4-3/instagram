@@ -1,13 +1,14 @@
-import time
 import json
-import sys
-from shutil import get_terminal_size
-from pathlib import Path
-from typing import Callable
 from mimetypes import guess_extension
+from pathlib import Path
+from shutil import get_terminal_size
+import sys
+import time
+from typing import Callable
+from urllib.parse import urlparse
+
 from requests.exceptions import HTTPError
 from requests.sessions import Session
-from urllib.parse import urlparse
 
 headers = {
     "authority": "www.instagram.com",
