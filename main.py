@@ -19,6 +19,7 @@ headers = {
     "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36",
 }
 root_dir = Path("./downloaded_files")
+subdir = True
 
 
 def get_urls() -> list[str]:
@@ -45,6 +46,9 @@ def get_urls() -> list[str]:
             global root_dir
             root_dir = Path(next_arg)
             count += 1
+        elif arg == "-s":
+            global subdir
+            subdir = not subdir
         else:
             if valid_url(arg):
                 urls.append(arg)
@@ -154,6 +158,7 @@ def parse_response(resp: dict) -> dict:
     info["items"] = list(filter(bool, info["items"]))
     return info
 
+
 # https://stackoverflow.com/questions/1094841/get-a-human-readable-version-of-a-file-size#1094933
 def sizeof_fmt(num, suffix="B"):
     for unit in ("", "Ki", "Mi", "Gi", "Ti", "Pi", "Ei", "Zi"):
@@ -161,6 +166,7 @@ def sizeof_fmt(num, suffix="B"):
             return f"{num:3.1f}{unit}{suffix}"
         num /= 1024.0
     return f"{num:.1f}Yi{suffix}"
+
 
 def main():
     urls = get_urls()
@@ -184,10 +190,15 @@ def main():
                     params=params,
                     allow_redirects=True,
                 )
-                data = parse_response(json.loads(resp.text))
-                Path("./data-%s-%03d.json" % (variables["shortcode"], i)).write_text(
-                    json.dumps(data, indent=2, ensure_ascii=False)
-                )
+                try:
+                    data = parse_response(json.loads(resp.text))
+                except Exception:
+                    Path(
+                        "./data-%s-%03d.json" % (variables["shortcode"], i)
+                    ).write_text(resp.text)
+                    print("[%d] %s" % (resp.status_code, resp.url))
+                    raise
+
                 print(
                     "%02d. Downloading: %s (%02d)"
                     % (i, variables["shortcode"], len(data["items"]))
@@ -199,29 +210,38 @@ def main():
                         def show_prog(done, total, _):
                             if atty:
                                 print(
-                                    "\r\t%02d. %s (%.1f%%)".expandtabs(2)
+                                    "\r↪ %02d. %s (%.1f%%)"
                                     % (idx, item["id"], (done / total) * 100),
                                     end="",
                                 )
 
+                        download_dir = (
+                            root_dir / ("%s" % data["user"]["id"])
+                            if subdir
+                            else root_dir
+                        )
                         d, t = download_media(
                             session,
                             item,
-                            root_dir / ("%s" % data["user"]["id"]),
+                            download_dir,
                             show_prog,
                         )
-                        print("\n\t%02d. %s -> %s [%d]".expandtabs(2) % (idx, item["id"], d, sizeof_fmt(t)))
+                        print(
+                            "\n%02d. %s -> %s [%s]"
+                            % (idx, item["id"], d, sizeof_fmt(t))
+                        )
                         time.sleep(idx % 3)
                     except KeyboardInterrupt:
                         break
                     except Exception as e:
-                        print("Error: %s" % e)
+                        print("\nDownload Error: %s" % (e))
                         continue
             except KeyboardInterrupt:
                 break
             except Exception as e:
-                print("Error: %s" % e)
+                print("Parse Error: %s" % e)
                 continue
+
             # resp = json.loads(Path('./test.json').read_text())
             # data = parse_response(resp)
             # print(json.dumps(data, indent=2, ensure_ascii=False))
