@@ -72,14 +72,23 @@ def download_media(
     with session.get(media_url, allow_redirects=True, stream=True) as resp:
         if resp.status_code != 200:
             raise HTTPError("Not ok response", request=resp.request, response=resp)
+
+        filename = filename.with_suffix(guess_extension(resp.headers.get("Content-Type") or "") or '.bin')
         try:
             content_length = int(resp.headers["Content-Length"])
         except (KeyError, TypeError, ValueError):
             content_length = -1
         downloaded = 0
+        chunk_size = 1024 * 10
+
+        if content_length > 0 and filename.exists() and filename.stat().st_size == content_length:
+            # Already downloaded
+            downloaded = content_length
+
+            cb(downloaded, content_length, chunk_size)
+            return filename, downloaded
 
         with filename.open("wb") as file:
-            chunk_size = 1024 * 10
             for chunk in resp.iter_content(chunk_size=chunk_size):
                 file.write(chunk)
                 downloaded += len(chunk)
@@ -88,15 +97,6 @@ def download_media(
                     content_length < downloaded and downloaded or content_length,
                     chunk_size,
                 )
-
-            filename.rename(
-                filename.with_suffix(
-                    guess_extension(resp.headers["Content-Type"]) or ".bin"
-                )
-            )
-            filename = filename.with_suffix(
-                guess_extension(resp.headers["Content-Type"]) or ".bin"
-            )
             return filename, downloaded
 
 
@@ -196,7 +196,22 @@ def main():
                 except Exception:
                     Path(
                         "./data-%s-%03d.json" % (variables["shortcode"], i)
-                    ).write_text(resp.text)
+                    ).write_text(
+                        json.dumps(
+                            {
+                                "resp": {
+                                    "url": resp.url,
+                                    "status": resp.status_code,
+                                    "params": params,
+                                    "variables": variables,
+                                    "text": resp.text,
+                                },
+                                "req": {"url": url},
+                            },
+                            indent=2,
+                            ensure_ascii=False,
+                        )
+                    )
                     print("[%d] %s" % (resp.status_code, resp.url))
                     raise
 
@@ -211,9 +226,9 @@ def main():
                         def show_prog(done, total, _):
                             if atty:
                                 print(
-                                    "\r↪ %02d. %s (%.1f%%)"
+                                    "↪ %02d. %s (%.1f%%)"
                                     % (idx, item["id"], (done / total) * 100),
-                                    end="",
+                                    end="\r",
                                 )
 
                         download_dir = (
@@ -228,7 +243,7 @@ def main():
                             show_prog,
                         )
                         print(
-                            "\n%02d. %s -> %s [%s]"
+                            "↪ %02d. %s -> %s [%s]"
                             % (idx, item["id"], d, sizeof_fmt(t))
                         )
                         time.sleep(idx % 3)
