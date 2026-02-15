@@ -1,6 +1,6 @@
 from asyncio import Semaphore, gather, run, sleep
 from pathlib import Path
-import random
+import random, re
 
 from aiohttp import ClientSession
 from rich.console import Console
@@ -77,14 +77,24 @@ async def download_user(
                 post_progress.advance(total_task, 1)
                 progress_bar.remove_task(pfp_task)
 
+def parse_username(raw: str) -> str:
+    if raw.startswith('http'):
+        if (is_url := re.search(r'instagram\.com/([^/]+)', raw)):
+            return is_url.group(1)
+        else:
+            return ''
+
+    return raw
 
 async def main():
+    root_path = Path("~/Downloads/Instagram/Users").expanduser() 
     console = Console()
     console.clear()
 
     try:
         use_cookies = False
-        username = console.input("[bold cyan]Enter username:[/bold cyan] ").strip()
+        console.print("Root path: '{}'".format(root_path))
+        username = parse_username(console.input("[bold cyan]Enter target username:[/bold cyan] ").strip())
         if not username:
             console.print("[red]Username cannot be empty.[/red]")
             return
@@ -122,7 +132,7 @@ async def main():
                         break
 
             user_data.posts = posts
-            user_path = Path("~/Downloads/Instagram/Users").expanduser() / username
+            user_path = root_path / username
             user_path.mkdir(parents=True, exist_ok=True)
             extractor.save_data(user_data, str(user_path / f"{username}.json"))
 
