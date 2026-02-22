@@ -10,6 +10,8 @@ from urllib.parse import urlparse
 from requests.exceptions import HTTPError
 from requests.sessions import Session
 
+# Video_by_{{username}} [{{full_name}}@Instagram] [{{id}}]    # .mp4 (or ext) will be added by `download_media`
+filename_format = "{title} [{channel}@Instagram] [{id}]"
 headers = {
     "authority": "www.instagram.com",
     "schema": "https",
@@ -21,6 +23,7 @@ headers = {
 }
 root_dir = Path("./downloaded_files")
 subdir = True
+show_stats = False
 
 
 def get_urls() -> list[str]:
@@ -50,6 +53,9 @@ def get_urls() -> list[str]:
         elif arg == "-s":
             global subdir
             subdir = not subdir
+        elif arg == "-t":
+            global show_stats
+            show_stats = not show_stats
         else:
             if valid_url(arg):
                 urls.append(arg)
@@ -61,19 +67,19 @@ def get_urls() -> list[str]:
 
 def download_media(
     session: Session,
-    parsed_graph: dict,
-    root_dir: Path,
+    media_url: str,
+    filename: Path,
     cb: Callable[[int, int, int], None],
 ) -> tuple[Path | None, int]:
-    media_url = parsed_graph["media"]["src"]
-    filename = root_dir / str(parsed_graph["id"])
     filename.parent.mkdir(exist_ok=True, parents=True)
 
     with session.get(media_url, allow_redirects=True, stream=True) as resp:
         if resp.status_code != 200:
             raise HTTPError("Not ok response", request=resp.request, response=resp)
 
-        filename = filename.with_suffix(guess_extension(resp.headers.get("Content-Type") or "") or '.bin')
+        filename = filename.with_suffix(
+            guess_extension(resp.headers.get("Content-Type") or "") or ".bin"
+        )
         try:
             content_length = int(resp.headers["Content-Length"])
         except (KeyError, TypeError, ValueError):
@@ -81,7 +87,11 @@ def download_media(
         downloaded = 0
         chunk_size = 1024 * 10
 
-        if content_length > 0 and filename.exists() and filename.stat().st_size == content_length:
+        if (
+            content_length > 0
+            and filename.exists()
+            and filename.stat().st_size == content_length
+        ):
             # Already downloaded
             downloaded = content_length
 
@@ -143,8 +153,9 @@ def parse_graphmedia(graph):
 
 def parse_response(resp: dict) -> dict:
     info = {}
+    verb = "Post"
     pic_json = resp["data"]["xdt_shortcode_media"]
-    info["type"] = pic_json["__typename"]  # XDT: ->
+    info["type"] = pic_json["__typename"]
     info["user"] = pic_json["owner"]
     info["items"] = []
 
@@ -156,6 +167,10 @@ def parse_response(resp: dict) -> dict:
     else:
         info["items"].append(parse_graphmedia(pic_json))
 
+    if len(info["items"]) > 1:
+        verb += "s"
+
+    info["title"] = f"{verb} by {info['user'].get('username')}"
     info["items"] = list(filter(bool, info["items"]))
     return info
 
@@ -174,6 +189,12 @@ def main():
     atty = sys.stdout.isatty()
 
     with Session() as session:
+        if show_stats:
+            print(f"Url found: {len(urls)}")
+            print(f"Output dir: {root_dir}")
+            print(f"Output format: {filename_format}")
+            print(f"Create subdir: {subdir}")
+
         for i, url in enumerate(urls, start=1):
             try:
                 if atty:
@@ -231,15 +252,20 @@ def main():
                                     end="\r",
                                 )
 
-                        download_dir = (
-                            root_dir / ("%s" % data["user"]["id"])
-                            if subdir
-                            else root_dir
+                        download_dir = root_dir / data["id"] if subdir else root_dir
+                        filename = download_dir / filename_format.format(
+                            **{
+                                "id": item["shortcode"] or item["id"],
+                                "title": data["title"],
+                                "channel": data["user"].get("full_name"),
+                                "uploader": data["user"].get("username"),
+                            }
                         )
+                        media_url = item["media"]["src"]
                         d, t = download_media(
                             session,
-                            item,
-                            download_dir,
+                            media_url,
+                            filename,
                             show_prog,
                         )
                         print(
