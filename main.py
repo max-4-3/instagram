@@ -24,6 +24,7 @@ headers = {
 root_dir = Path("./downloaded_files")
 subdir = True
 show_stats = False
+raise_error = False
 
 
 def get_urls() -> list[str]:
@@ -56,6 +57,9 @@ def get_urls() -> list[str]:
         elif arg == "-t":
             global show_stats
             show_stats = not show_stats
+        elif arg == "-e":
+            global raise_error
+            raise_error = not raise_error
         else:
             if valid_url(arg):
                 urls.append(arg)
@@ -252,7 +256,9 @@ def main():
                                     end="\r",
                                 )
 
-                        download_dir = root_dir / data["id"] if subdir else root_dir
+                        download_dir = (
+                            root_dir / data["user"]["id"] if subdir else root_dir
+                        )
                         filename = download_dir / filename_format.format(
                             **{
                                 "id": item["shortcode"] or item["id"],
@@ -277,12 +283,14 @@ def main():
                         break
                     except Exception as e:
                         print("\nDownload Error: %s" % (e))
-                        continue
+                        if raise_error:
+                            raise e
             except KeyboardInterrupt:
                 break
             except Exception as e:
                 print("Parse Error: %s" % e)
-                continue
+                if raise_error:
+                    raise e
 
             # resp = json.loads(Path('./test.json').read_text())
             # data = parse_response(resp)

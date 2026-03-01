@@ -15,6 +15,7 @@ Options:
 - `-s`          : No subdirectory (downloads the media in the `root_dir`)
 - `-d` `<path>` : Sets the `root_dir` to `<path>`
 - `-t`          : Toogle showing stats
+- `-e`          : Toogle raising error
 
 ## Requirments
 - requests
