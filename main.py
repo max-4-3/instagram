@@ -110,7 +110,7 @@ async def main():
             if use_cookies:
                 console.print("[yellow]Enabling saved cookies...")
                 session.cookie_jar.update_cookies(create_cookie_dict(load_env())) # pyright: ignore[reportArgumentType]
-                session.cookie_jar.update_cookies = lambda *_: None # pyright: ignore[reportAttributeAccessIssue] to make cookies frozen
+                # session.cookie_jar.update_cookies = lambda *_: None # pyright: ignore[reportAttributeAccessIssue] to make cookies frozen
             try:
                 user_data = await extractor.get_user(username)
             except PrivateUser:
@@ -119,6 +119,7 @@ async def main():
 
             console.print(f"[cyan]Fetching posts for {username}...[/cyan]")
             posts = []
+
             with Progress(SpinnerColumn(random_spinner()), *PROGRESS_BAR, console=console) as progress_bar:
                 post_task = progress_bar.add_task(
                     "Extracting posts...", total=user_data.posts_count
@@ -128,7 +129,7 @@ async def main():
                         posts.extend(chunk)
                         progress_bar.advance(post_task, len(chunk))
                     except KeyboardInterrupt:
-                        progress_bar.console.print(f"[red]Stoping...[/red]")
+                        progress_bar.console.print("[red]Stoping...[/red]")
                         break
 
             user_data.posts = posts
